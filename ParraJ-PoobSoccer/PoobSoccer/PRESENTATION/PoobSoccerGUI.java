@@ -11,9 +11,9 @@ import DOMINIO.Player;
 import DOMINIO.PoobSoccer;
 
 // ParraJ
-// Ventana principal de Head Soccer. Tiene cinco pantallas que se cambian
+// Ventana principal de Head Soccer. Tiene seis pantallas que se cambian
 // con un CardLayout: inicio, seleccion de modo, seleccion de modalidad (goles o tiempo),
-// seleccion de personajes y juego.
+// seleccion de personajes, controles (5 segundos) y juego. Durante la partida hay un boton de pausa.
 // Por ahora solo funciona el modo P1 vs P2.
 // Jugador 1: A, D mover, W saltar, S patear, Q activar el poder.
 // Jugador 2: flechas izquierda y derecha mover, flecha arriba saltar, flecha abajo patear,
@@ -24,12 +24,18 @@ public class PoobSoccerGUI extends JFrame
     private static final String MODOS = "modos";
     private static final String MODALIDAD = "modalidad";
     private static final String PERSONAJES = "personajes";
+    private static final String CONTROLES = "controles";
+    private static final int CONTROLES_SEGUNDOS = 5;
+    private static final String[] CONTROLES_P1 = {"A / D: mover", "W: saltar", "S: patear", "Q: usar poder"};
+    private static final String[] CONTROLES_P2 = {"Flechas izquierda / derecha: mover", "Flecha arriba: saltar",
+        "Flecha abajo: patear", "Ctrl derecho: usar poder"};
     private static final String JUEGO = "juego";
 
     private PoobSoccer poob;
     private Timer timer;
     private boolean running;
     private boolean wasRunning;
+    private boolean paused;
     private long lastNano;
 
     private CardLayout cardLayout;
@@ -64,7 +70,11 @@ public class PoobSoccerGUI extends JFrame
     private JButton botonStartPersonajes;
     private JButton botonVolverPersonajes;
 
+    // Pantalla de controles
+    private Timer timerControles;
+
     // Pantalla de juego
+    private JButton botonPausa;
     private PanelJuego panelJuego;
     private JLabel timerLabel;
     private JLabel scoreLabel;
@@ -79,7 +89,7 @@ public class PoobSoccerGUI extends JFrame
         prepareController();
     }
 
-    // Prepara el menu y las cinco pantallas
+    // Prepara el menu y las seis pantallas
     private void prepareView()
     {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
@@ -92,6 +102,7 @@ public class PoobSoccerGUI extends JFrame
         cards.add(prepareViewModos(), MODOS);
         cards.add(prepareViewModalidad(), MODALIDAD);
         cards.add(prepareViewPersonajes(), PERSONAJES);
+        cards.add(prepareViewControles(), CONTROLES);
         cards.add(prepareViewJuego(), JUEGO);
         add(cards, BorderLayout.CENTER);
 
@@ -316,6 +327,46 @@ public class PoobSoccerGUI extends JFrame
         return mitad;
     }
 
+    // Pantalla de controles: dividida a la mitad, a la izquierda los controles del jugador 1
+    // y a la derecha los del jugador 2. Dura unos segundos y despues empieza el partido
+    private JPanel prepareViewControles()
+    {
+        JPanel panel = new JPanel(new BorderLayout());
+
+        JLabel titulo = new JLabel("Controles", SwingConstants.CENTER);
+        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 36f));
+        titulo.setBorder(BorderFactory.createEmptyBorder(30, 0, 0, 0));
+        panel.add(titulo, BorderLayout.NORTH);
+
+        JPanel mitades = new JPanel(new GridLayout(1, 2));
+        JPanel izquierda = prepareViewMitadControles("Jugador 1", CONTROLES_P1);
+        izquierda.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 2, Color.BLACK));
+        mitades.add(izquierda);
+        mitades.add(prepareViewMitadControles("Jugador 2", CONTROLES_P2));
+        panel.add(mitades, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    // Una mitad de la pantalla de controles: el nombre del jugador y una linea por control
+    private JPanel prepareViewMitadControles(String jugador, String[] lineas)
+    {
+        JLabel nombre = new JLabel(jugador, SwingConstants.CENTER);
+        nombre.setFont(nombre.getFont().deriveFont(Font.BOLD, 30f));
+
+        JPanel columna = new JPanel(new GridLayout(lineas.length + 1, 1, 0, 20));
+        columna.add(nombre);
+        for (String linea : lineas) {
+            JLabel etiqueta = new JLabel(linea, SwingConstants.CENTER);
+            etiqueta.setFont(etiqueta.getFont().deriveFont(22f));
+            columna.add(etiqueta);
+        }
+
+        JPanel mitad = new JPanel(new GridBagLayout());
+        mitad.add(columna);
+        return mitad;
+    }
+
     // Pantalla de juego: informacion de cada jugador, cronometro y marcador arriba, el campo al centro
     private JPanel prepareViewJuego()
     {
@@ -326,9 +377,15 @@ public class PoobSoccerGUI extends JFrame
         scoreLabel = new JLabel("0 - 0", SwingConstants.CENTER);
         scoreLabel.setFont(scoreLabel.getFont().deriveFont(Font.BOLD, 24f));
 
-        JPanel centroHud = new JPanel(new GridLayout(2, 1));
+        botonPausa = new JButton("Pausa");
+        botonPausa.setFocusable(false);
+        JPanel panelPausa = new JPanel(new FlowLayout());
+        panelPausa.add(botonPausa);
+
+        JPanel centroHud = new JPanel(new GridLayout(3, 1));
         centroHud.add(timerLabel);
         centroHud.add(scoreLabel);
+        centroHud.add(panelPausa);
 
         infoJugador1 = new JLabel("", SwingConstants.LEFT);
         infoJugador2 = new JLabel("", SwingConstants.RIGHT);
@@ -368,6 +425,8 @@ public class PoobSoccerGUI extends JFrame
         prepareControllerModos();
         prepareControllerModalidad();
         prepareControllerPersonajes();
+        prepareControllerPausa();
+        prepareControllerControles();
     }
 
     // El timer llama a tick unas 60 veces por segundo
@@ -391,7 +450,7 @@ public class PoobSoccerGUI extends JFrame
             @Override
             public void keyPressed(KeyEvent e)
             {
-                if (poob == null || !running) {
+                if (poob == null || !running || paused) {
                     return;
                 }
                 switch (e.getKeyCode()) {
@@ -571,7 +630,7 @@ public class PoobSoccerGUI extends JFrame
                         "Cada jugador debe elegir un personaje antes de empezar.",
                         "Falta elegir personaje", JOptionPane.WARNING_MESSAGE);
                 } else {
-                    startGame();
+                    showControles();
                 }
             }
         });
@@ -607,6 +666,63 @@ public class PoobSoccerGUI extends JFrame
         valoresStats[jugador][2].setText(String.valueOf(c.getSpeed()));
         valoresStats[jugador][3].setText(String.valueOf(c.getJump()));
         valoresStats[jugador][4].setText(c.hasPower() ? String.valueOf(Math.round(c.getPowerDamage())) : "-");
+    }
+
+    // Boton de pausa: detiene o reanuda el partido
+    private void prepareControllerPausa()
+    {
+        botonPausa.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                togglePause();
+            }
+        });
+    }
+
+    // El timer de la pantalla de controles espera unos segundos (una sola vez) y empieza el partido
+    private void prepareControllerControles()
+    {
+        timerControles = new Timer(CONTROLES_SEGUNDOS * 1000, new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                startGame();
+            }
+        });
+        timerControles.setRepeats(false);
+    }
+
+    // Muestra la pantalla de controles y empieza a contar el tiempo
+    private void showControles()
+    {
+        cardLayout.show(cards, CONTROLES);
+        timerControles.restart();
+    }
+
+    // Pausa el partido si esta corriendo, o lo reanuda si estaba en pausa
+    private void togglePause()
+    {
+        if (!running) {
+            return;
+        }
+        if (paused) {
+            paused = false;
+            botonPausa.setText("Pausa");
+            lastNano = System.nanoTime();
+            timer.start();
+            panelJuego.requestFocusInWindow();
+        } else {
+            paused = true;
+            botonPausa.setText("Continuar");
+            timer.stop();
+            poob.getPlayer1().setMovingLeft(false);
+            poob.getPlayer1().setMovingRight(false);
+            poob.getPlayer2().setMovingLeft(false);
+            poob.getPlayer2().setMovingRight(false);
+        }
     }
 
     // Detiene el juego mientras hay un dialogo abierto
@@ -692,6 +808,8 @@ public class PoobSoccerGUI extends JFrame
         updateHud();
 
         running = true;
+        paused = false;
+        botonPausa.setText("Pausa");
         cardLayout.show(cards, JUEGO);
         lastNano = System.nanoTime();
         timer.start();
@@ -770,6 +888,7 @@ public class PoobSoccerGUI extends JFrame
     {
         timer.stop();
         running = false;
+        paused = false;
 
         int winner = poob.getWinner();
         String mensaje = (winner == 0)

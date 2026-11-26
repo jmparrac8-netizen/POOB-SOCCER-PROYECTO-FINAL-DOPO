@@ -4,18 +4,26 @@ import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
 import java.io.File;
+import DOMINIO.Effect;
+import DOMINIO.GameCharacter;
+import DOMINIO.MatchType;
+import DOMINIO.Player;
 import DOMINIO.PoobSoccer;
 
 // ParraJ
-// Ventana principal de Head Soccer. Tiene tres pantallas que se cambian
-// con un CardLayout: inicio, seleccion de modo y juego.
+// Ventana principal de Head Soccer. Tiene cinco pantallas que se cambian
+// con un CardLayout: inicio, seleccion de modo, seleccion de modalidad (goles o tiempo),
+// seleccion de personajes y juego.
 // Por ahora solo funciona el modo P1 vs P2.
-// Jugador 1: A, D mover, W saltar.
-// Jugador 2: flechas izquierda y derecha mover, flecha arriba saltar.
+// Jugador 1: A, D mover, W saltar, S patear, Q activar el poder.
+// Jugador 2: flechas izquierda y derecha mover, flecha arriba saltar, flecha abajo patear,
+// Ctrl derecho activar el poder.
 public class PoobSoccerGUI extends JFrame
 {
     private static final String INICIO = "inicio";
     private static final String MODOS = "modos";
+    private static final String MODALIDAD = "modalidad";
+    private static final String PERSONAJES = "personajes";
     private static final String JUEGO = "juego";
 
     private PoobSoccer poob;
@@ -36,13 +44,32 @@ public class PoobSoccerGUI extends JFrame
     // Pantalla de modos
     private JButton botonPvP;
     private JButton botonPvBot;
-    private JButton botonBotBot;
     private JButton botonVolver;
+
+    // Pantalla de modalidad
+    private JComboBox<String> comboGoles;
+    private JComboBox<String> comboTiempo;
+    private JButton botonStartGoles;
+    private JButton botonStartTiempo;
+    private JButton botonVolverModalidad;
+    private MatchType tipoPartido;
+    private int metaPartido;
+
+    // Pantalla de personajes (un juego de componentes por jugador)
+    private GameCharacter[] personajes;
+    private JToggleButton[][] botonesPersonaje;
+    private ButtonGroup[] gruposPersonaje;
+    private JLabel[][] valoresStats;
+    private int[] elegido;
+    private JButton botonStartPersonajes;
+    private JButton botonVolverPersonajes;
 
     // Pantalla de juego
     private PanelJuego panelJuego;
     private JLabel timerLabel;
     private JLabel scoreLabel;
+    private JLabel infoJugador1;
+    private JLabel infoJugador2;
 
     // Crea la ventana y prepara la vista y el controlador
     public PoobSoccerGUI()
@@ -52,7 +79,7 @@ public class PoobSoccerGUI extends JFrame
         prepareController();
     }
 
-    // Prepara el menu y las tres pantallas
+    // Prepara el menu y las cinco pantallas
     private void prepareView()
     {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
@@ -63,6 +90,8 @@ public class PoobSoccerGUI extends JFrame
         cards = new JPanel(cardLayout);
         cards.add(prepareViewInicio(), INICIO);
         cards.add(prepareViewModos(), MODOS);
+        cards.add(prepareViewModalidad(), MODALIDAD);
+        cards.add(prepareViewPersonajes(), PERSONAJES);
         cards.add(prepareViewJuego(), JUEGO);
         add(cards, BorderLayout.CENTER);
 
@@ -116,7 +145,7 @@ public class PoobSoccerGUI extends JFrame
         return inicio;
     }
 
-    // Pantalla de seleccion de modo: tres modos y un boton para volver
+    // Pantalla de seleccion de modo: dos modos y un boton para volver
     private JPanel prepareViewModos()
     {
         JPanel modos = new JPanel(new BorderLayout());
@@ -128,18 +157,16 @@ public class PoobSoccerGUI extends JFrame
 
         botonPvP = new JButton("P1 vs P2");
         botonPvBot = new JButton("P1 vs Bot");
-        botonBotBot = new JButton("Bot vs Bot");
         Font fuente = botonPvP.getFont().deriveFont(Font.BOLD, 24f);
-        for (JButton b : new JButton[]{botonPvP, botonPvBot, botonBotBot}) {
+        for (JButton b : new JButton[]{botonPvP, botonPvBot}) {
             b.setFont(fuente);
             b.setFocusable(false);
         }
 
-        JPanel centro = new JPanel(new GridLayout(3, 1, 0, 20));
+        JPanel centro = new JPanel(new GridLayout(2, 1, 0, 20));
         centro.setBorder(BorderFactory.createEmptyBorder(60, 400, 60, 400));
         centro.add(botonPvP);
         centro.add(botonPvBot);
-        centro.add(botonBotBot);
         modos.add(centro, BorderLayout.CENTER);
 
         JPanel sur = new JPanel(new FlowLayout());
@@ -151,7 +178,145 @@ public class PoobSoccerGUI extends JFrame
         return modos;
     }
 
-    // Pantalla de juego: cronometro y marcador arriba, el campo al centro
+    // Pantalla de modalidad: a la izquierda el partido por goles (3, 6 o 9) y a la derecha
+    // el partido por tiempo (60, 90 o 120 segundos). Cada lado tiene su boton Start
+    private JPanel prepareViewModalidad()
+    {
+        JPanel modalidad = new JPanel(new BorderLayout());
+
+        JLabel titulo = new JLabel("Selecciona Modalidad", SwingConstants.CENTER);
+        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 36f));
+        titulo.setBorder(BorderFactory.createEmptyBorder(30, 0, 0, 0));
+        modalidad.add(titulo, BorderLayout.NORTH);
+
+        String[] goles = new String[PoobSoccer.GOAL_OPTIONS.length];
+        for (int i = 0; i < goles.length; i++) {
+            goles[i] = PoobSoccer.GOAL_OPTIONS[i] + " goles";
+        }
+        String[] tiempos = new String[PoobSoccer.TIME_OPTIONS.length];
+        for (int i = 0; i < tiempos.length; i++) {
+            tiempos[i] = PoobSoccer.TIME_OPTIONS[i] + " segundos";
+        }
+        comboGoles = new JComboBox<String>(goles);
+        comboTiempo = new JComboBox<String>(tiempos);
+        botonStartGoles = new JButton("Start");
+        botonStartTiempo = new JButton("Start");
+
+        JPanel mitades = new JPanel(new GridLayout(1, 2));
+        JPanel izquierda = prepareViewMitadModalidad("Goles", comboGoles, botonStartGoles);
+        izquierda.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 2, Color.BLACK));
+        mitades.add(izquierda);
+        mitades.add(prepareViewMitadModalidad("Tiempo", comboTiempo, botonStartTiempo));
+        modalidad.add(mitades, BorderLayout.CENTER);
+
+        JPanel sur = new JPanel(new FlowLayout());
+        botonVolverModalidad = new JButton("Volver");
+        botonVolverModalidad.setFocusable(false);
+        sur.add(botonVolverModalidad);
+        modalidad.add(sur, BorderLayout.SOUTH);
+
+        return modalidad;
+    }
+
+    // Una mitad de la pantalla de modalidad: titulo, lista de opciones y boton Start
+    private JPanel prepareViewMitadModalidad(String texto, JComboBox<String> combo, JButton start)
+    {
+        JLabel etiqueta = new JLabel(texto, SwingConstants.CENTER);
+        etiqueta.setFont(etiqueta.getFont().deriveFont(Font.BOLD, 32f));
+        combo.setFont(combo.getFont().deriveFont(20f));
+        start.setFont(start.getFont().deriveFont(Font.BOLD, 24f));
+        start.setFocusable(false);
+
+        JPanel columna = new JPanel(new GridLayout(3, 1, 0, 30));
+        columna.setPreferredSize(new Dimension(300, 240));
+        columna.add(etiqueta);
+        columna.add(combo);
+        columna.add(start);
+
+        JPanel mitad = new JPanel(new GridBagLayout());
+        mitad.add(columna);
+        return mitad;
+    }
+
+    // Pantalla de seleccion de personajes: una mitad por jugador y un boton Start abajo
+    private JPanel prepareViewPersonajes()
+    {
+        personajes = GameCharacter.available();
+        botonesPersonaje = new JToggleButton[2][personajes.length];
+        gruposPersonaje = new ButtonGroup[]{new ButtonGroup(), new ButtonGroup()};
+        valoresStats = new JLabel[2][5];
+        elegido = new int[]{-1, -1};
+
+        JPanel panel = new JPanel(new BorderLayout());
+
+        JLabel titulo = new JLabel("Selecciona tu personaje", SwingConstants.CENTER);
+        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 36f));
+        titulo.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
+        panel.add(titulo, BorderLayout.NORTH);
+
+        JPanel mitades = new JPanel(new GridLayout(1, 2));
+        JPanel izquierda = prepareViewMitadPersonajes(0, "Jugador 1  (A/D mover, W saltar, S patear, Q poder)");
+        izquierda.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 0, 2, Color.BLACK), izquierda.getBorder()));
+        mitades.add(izquierda);
+        mitades.add(prepareViewMitadPersonajes(1, "Jugador 2  (flechas mover y saltar, flecha abajo patear, Ctrl derecho poder)"));
+        panel.add(mitades, BorderLayout.CENTER);
+
+        botonStartPersonajes = new JButton("Start");
+        botonStartPersonajes.setFont(botonStartPersonajes.getFont().deriveFont(Font.BOLD, 24f));
+        botonStartPersonajes.setPreferredSize(new Dimension(200, 60));
+        botonStartPersonajes.setFocusable(false);
+        botonVolverPersonajes = new JButton("Volver");
+        botonVolverPersonajes.setFocusable(false);
+        JPanel sur = new JPanel(new FlowLayout(FlowLayout.CENTER, 40, 10));
+        sur.add(botonVolverPersonajes);
+        sur.add(botonStartPersonajes);
+        panel.add(sur, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    // Mitad de un jugador: arriba la tabla de estadisticas (PS, DMG, Speed, Jump, Power)
+    // y abajo un boton con el nombre de cada pais
+    private JPanel prepareViewMitadPersonajes(int jugador, String titulo)
+    {
+        JPanel mitad = new JPanel(new BorderLayout());
+        mitad.setBorder(BorderFactory.createTitledBorder(titulo));
+
+        String[] nombres = {"PS", "DMG", "Speed", "Jump", "Power"};
+        JPanel tabla = new JPanel(new GridLayout(2, 5));
+        tabla.setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
+        for (String nombre : nombres) {
+            JLabel cabecera = new JLabel(nombre, SwingConstants.CENTER);
+            cabecera.setFont(cabecera.getFont().deriveFont(Font.BOLD, 18f));
+            tabla.add(cabecera);
+        }
+        for (int i = 0; i < nombres.length; i++) {
+            valoresStats[jugador][i] = new JLabel("-", SwingConstants.CENTER);
+            valoresStats[jugador][i].setFont(valoresStats[jugador][i].getFont().deriveFont(Font.BOLD, 22f));
+            tabla.add(valoresStats[jugador][i]);
+        }
+        tabla.setPreferredSize(new Dimension(100, 90));
+        JPanel arriba = new JPanel(new BorderLayout());
+        arriba.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        arriba.add(tabla, BorderLayout.CENTER);
+        mitad.add(arriba, BorderLayout.NORTH);
+
+        JPanel botones = new JPanel(new GridLayout(2, 2, 30, 30));
+        botones.setBorder(BorderFactory.createEmptyBorder(40, 40, 40, 40));
+        for (int i = 0; i < personajes.length; i++) {
+            JToggleButton boton = new JToggleButton(personajes[i].getName());
+            boton.setFont(boton.getFont().deriveFont(Font.BOLD, 22f));
+            boton.setFocusable(false);
+            botonesPersonaje[jugador][i] = boton;
+            gruposPersonaje[jugador].add(boton);
+            botones.add(boton);
+        }
+        mitad.add(botones, BorderLayout.CENTER);
+        return mitad;
+    }
+
+    // Pantalla de juego: informacion de cada jugador, cronometro y marcador arriba, el campo al centro
     private JPanel prepareViewJuego()
     {
         JPanel juego = new JPanel(new BorderLayout());
@@ -161,9 +326,21 @@ public class PoobSoccerGUI extends JFrame
         scoreLabel = new JLabel("0 - 0", SwingConstants.CENTER);
         scoreLabel.setFont(scoreLabel.getFont().deriveFont(Font.BOLD, 24f));
 
-        JPanel hud = new JPanel(new GridLayout(2, 1));
-        hud.add(timerLabel);
-        hud.add(scoreLabel);
+        JPanel centroHud = new JPanel(new GridLayout(2, 1));
+        centroHud.add(timerLabel);
+        centroHud.add(scoreLabel);
+
+        infoJugador1 = new JLabel("", SwingConstants.LEFT);
+        infoJugador2 = new JLabel("", SwingConstants.RIGHT);
+        infoJugador1.setFont(infoJugador1.getFont().deriveFont(Font.BOLD, 15f));
+        infoJugador2.setFont(infoJugador2.getFont().deriveFont(Font.BOLD, 15f));
+        infoJugador1.setBorder(BorderFactory.createEmptyBorder(0, 15, 0, 0));
+        infoJugador2.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 15));
+
+        JPanel hud = new JPanel(new GridLayout(1, 3));
+        hud.add(infoJugador1);
+        hud.add(centroHud);
+        hud.add(infoJugador2);
 
         panelJuego = new PanelJuego();
 
@@ -189,6 +366,8 @@ public class PoobSoccerGUI extends JFrame
         prepareControllerMenu();
         prepareControllerButtons();
         prepareControllerModos();
+        prepareControllerModalidad();
+        prepareControllerPersonajes();
     }
 
     // El timer llama a tick unas 60 veces por segundo
@@ -219,9 +398,17 @@ public class PoobSoccerGUI extends JFrame
                     case KeyEvent.VK_A:     poob.getPlayer1().setMovingLeft(true); break;
                     case KeyEvent.VK_D:     poob.getPlayer1().setMovingRight(true); break;
                     case KeyEvent.VK_W:     poob.getPlayer1().jump(); break;
+                    case KeyEvent.VK_S:     poob.getPlayer1().kick(); break;
+                    case KeyEvent.VK_Q:     poob.getPlayer1().activatePower(); break;
                     case KeyEvent.VK_LEFT:  poob.getPlayer2().setMovingLeft(true); break;
                     case KeyEvent.VK_RIGHT: poob.getPlayer2().setMovingRight(true); break;
                     case KeyEvent.VK_UP:    poob.getPlayer2().jump(); break;
+                    case KeyEvent.VK_DOWN:  poob.getPlayer2().kick(); break;
+                    case KeyEvent.VK_CONTROL:
+                        if (e.getKeyLocation() == KeyEvent.KEY_LOCATION_RIGHT) {
+                            poob.getPlayer2().activatePower();
+                        }
+                        break;
                 }
             }
 
@@ -291,18 +478,10 @@ public class PoobSoccerGUI extends JFrame
             @Override
             public void actionPerformed(ActionEvent e)
             {
-                startGame();
+                cardLayout.show(cards, MODALIDAD);
             }
         });
         botonPvBot.addActionListener(new ActionListener()
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                modoNoDisponible();
-            }
-        });
-        botonBotBot.addActionListener(new ActionListener()
         {
             @Override
             public void actionPerformed(ActionEvent e)
@@ -318,6 +497,116 @@ public class PoobSoccerGUI extends JFrame
                 cardLayout.show(cards, INICIO);
             }
         });
+    }
+
+    // Acciones de los botones de la pantalla de modalidad
+    private void prepareControllerModalidad()
+    {
+        botonStartGoles.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                tipoPartido = MatchType.GOALS;
+                metaPartido = PoobSoccer.GOAL_OPTIONS[comboGoles.getSelectedIndex()];
+                showPersonajes();
+            }
+        });
+        botonStartTiempo.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                tipoPartido = MatchType.TIME;
+                metaPartido = PoobSoccer.TIME_OPTIONS[comboTiempo.getSelectedIndex()];
+                showPersonajes();
+            }
+        });
+        botonVolverModalidad.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                cardLayout.show(cards, MODOS);
+            }
+        });
+    }
+
+    // Acciones de los botones de la pantalla de personajes
+    private void prepareControllerPersonajes()
+    {
+        for (int jugador = 0; jugador < 2; jugador++) {
+            for (int i = 0; i < personajes.length; i++) {
+                final int j = jugador;
+                final int k = i;
+                botonesPersonaje[j][k].addActionListener(new ActionListener()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        if (personajes[k].isUnderConstruction()) {
+                            JOptionPane.showMessageDialog(PoobSoccerGUI.this,
+                                "Personaje en construccion",
+                                personajes[k].getName(), JOptionPane.INFORMATION_MESSAGE);
+                            if (elegido[j] >= 0) {
+                                botonesPersonaje[j][elegido[j]].setSelected(true);
+                            } else {
+                                gruposPersonaje[j].clearSelection();
+                            }
+                            return;
+                        }
+                        elegido[j] = k;
+                        showStats(j, personajes[k]);
+                    }
+                });
+            }
+        }
+        botonStartPersonajes.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                if (elegido[0] < 0 || elegido[1] < 0) {
+                    JOptionPane.showMessageDialog(PoobSoccerGUI.this,
+                        "Cada jugador debe elegir un personaje antes de empezar.",
+                        "Falta elegir personaje", JOptionPane.WARNING_MESSAGE);
+                } else {
+                    startGame();
+                }
+            }
+        });
+        botonVolverPersonajes.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                cardLayout.show(cards, MODALIDAD);
+            }
+        });
+    }
+
+    // Muestra la pantalla de personajes sin ninguno elegido
+    private void showPersonajes()
+    {
+        for (int jugador = 0; jugador < 2; jugador++) {
+            gruposPersonaje[jugador].clearSelection();
+            elegido[jugador] = -1;
+            for (JLabel valor : valoresStats[jugador]) {
+                valor.setText("-");
+            }
+        }
+        cardLayout.show(cards, PERSONAJES);
+    }
+
+    // Muestra las estadisticas del personaje en la tabla del jugador:
+    // PS (vida maxima), DMG (dano de patada), Speed, Jump y Power (dano del tiro de poder, "-" si no tiene)
+    private void showStats(int jugador, GameCharacter c)
+    {
+        valoresStats[jugador][0].setText(String.valueOf(Math.round(c.getMaxLife())));
+        valoresStats[jugador][1].setText(String.valueOf(Math.round(c.getKickDamage())));
+        valoresStats[jugador][2].setText(String.valueOf(c.getSpeed()));
+        valoresStats[jugador][3].setText(String.valueOf(c.getJump()));
+        valoresStats[jugador][4].setText(c.hasPower() ? String.valueOf(Math.round(c.getPowerDamage())) : "-");
     }
 
     // Detiene el juego mientras hay un dialogo abierto
@@ -394,11 +683,11 @@ public class PoobSoccerGUI extends JFrame
             "Modo no disponible", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // Modo P1 vs P2: crea el juego y empieza de inmediato
+    // Crea el juego con la modalidad y los personajes elegidos y empieza de inmediato
     private void startGame()
     {
         timer.stop();
-        poob = new PoobSoccer();
+        poob = new PoobSoccer(tipoPartido, metaPartido, personajes[elegido[0]], personajes[elegido[1]]);
         panelJuego.setPoob(poob);
         updateHud();
 
@@ -436,11 +725,44 @@ public class PoobSoccerGUI extends JFrame
         }
     }
 
-    // Actualiza el cronometro y el marcador
+    // Actualiza el cronometro (o la meta de goles), el marcador y la informacion de cada jugador
     private void updateHud()
     {
-        timerLabel.setText(String.valueOf((int) Math.ceil(poob.getTimeLeft())));
+        if (poob.getMatchType() == MatchType.GOALS) {
+            timerLabel.setText("Primero a " + poob.getTarget() + " goles");
+        } else if (poob.isSuddenDeath()) {
+            timerLabel.setText("Muerte subita");
+        } else {
+            timerLabel.setText(String.valueOf((int) Math.ceil(poob.getTimeLeft())));
+        }
         scoreLabel.setText(poob.getScore1() + " - " + poob.getScore2());
+        infoJugador1.setText(playerInfo("Jugador 1", poob.getPlayer1()));
+        infoJugador2.setText(playerInfo("Jugador 2", poob.getPlayer2()));
+    }
+
+    // Texto con el pais, la vida, la barra de poder y el estado (aura, efecto o aturdimiento) de un jugador
+    private String playerInfo(String titulo, Player p)
+    {
+        String poder;
+        if (!p.getCharacter().hasPower()) {
+            poder = "no tiene";
+        } else {
+            poder = Math.round(p.getPowerBar() * 100) + "%";
+        }
+        String estado = "normal";
+        if (p.isStunned()) {
+            estado = "ATURDIDO";
+        } else if (p.getEffect() == Effect.ELECTROCUTED) {
+            estado = "ELECTROCUTADO";
+        } else if (p.getEffect() == Effect.KNOCKED_OUT) {
+            estado = "INCONSCIENTE";
+        } else if (p.hasPower()) {
+            estado = "AURA: " + p.getCharacter().getPower().getName();
+        }
+        return "<html>" + titulo + " - " + p.getCharacter().getName()
+            + "<br>Vida: " + (int) Math.ceil(p.getLife()) + " / " + (int) Math.round(p.getMaxLife())
+            + "<br>Poder: " + poder
+            + "<br>Estado: " + estado + "</html>";
     }
 
     // Termina el juego, muestra quien gano y vuelve a la pantalla de inicio

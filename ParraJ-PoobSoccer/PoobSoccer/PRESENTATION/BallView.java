@@ -3,7 +3,7 @@ package PRESENTATION;
 import DOMINIO.Ball;
 
 // ParraJ
-// Figura del balon: un circulo blanco. Lee la posicion del balon del dominio.
+// Figura del balon: un circulo blanco (toma el color del aura mientras hay un tiro de poder). Lee la posicion del balon del dominio.
 // La figura se crea la primera vez que se dibuja.
 public class BallView
 {
@@ -41,6 +41,7 @@ public class BallView
         int newY = (int) Math.round(ball.getY() - Ball.RADIUS);
         circle.moveHorizontal(newX - xPosition);
         circle.moveVertical(newY - yPosition);
+        circle.changeColor(ball.getColor());
         xPosition = newX;
         yPosition = newY;
         circle.makeVisible();

@@ -26,6 +26,9 @@ public class Ball
     private double vx;
     private double vy;
     private boolean onGround;
+    private String color = "white";
+    private boolean straightShot;
+    private double forcedBounce;
 
     // Crea un balon quieto con el centro en la posicion dada
     public Ball(double x, double y)
@@ -64,9 +67,57 @@ public class Ball
         return onGround;
     }
 
+    // Devuelve el color del balon (cambia mientras hay un tiro de poder)
+    public String getColor()
+    {
+        return color;
+    }
+
+    // Cambia el color del balon
+    public void setColor(String color)
+    {
+        this.color = color;
+    }
+
+    // Indica si el balon va en un tiro de poder
+    public boolean isShot()
+    {
+        return straightShot || forcedBounce > 0;
+    }
+
+    // Tiro recto: el balon sale con la velocidad horizontal dada y sin gravedad ni roce
+    public void startStraightShot(double vx)
+    {
+        endShot();
+        straightShot = true;
+        this.vx = vx;
+        this.vy = 0;
+        onGround = false;
+    }
+
+    // Tiro a ras de suelo: el balon baja al piso y avanza dando saltos cortos y rapidos
+    public void startBouncingShot(double vx, double bounce, double groundY)
+    {
+        endShot();
+        forcedBounce = bounce;
+        this.y = groundY - RADIUS;
+        this.vx = vx;
+        this.vy = -bounce;
+        onGround = false;
+    }
+
+    // Termina el tiro de poder: el balon vuelve a su fisica normal
+    public void endShot()
+    {
+        straightShot = false;
+        forcedBounce = 0;
+    }
+
     // Pone el balon quieto en la posicion dada
     public void reset(double x, double y)
     {
+        endShot();
+        color = "white";
         this.x = x;
         this.y = y;
         this.vx = 0;
@@ -85,13 +136,15 @@ public class Ball
     // Avanza al balon un paso: gravedad, roce, movimiento y rebote contra los bordes del campo
     public void update(double fieldWidth, double groundY)
     {
-        vy += GRAVITY;
-        vx *= AIR_DRAG;
+        if (!straightShot) {
+            vy += GRAVITY;
+            vx *= AIR_DRAG;
+        }
         limitSpeed();
         x += vx;
         y += vy;
         keepInside(fieldWidth, groundY);
-        if (onGround) {
+        if (onGround && !isShot()) {
             vx *= FLOOR_FRICTION;
             if (Math.abs(vx) < STOP_SPEED) {
                 vx = 0;
@@ -125,9 +178,13 @@ public class Ball
             y = groundY - RADIUS;
             onGround = true;
             if (vy > 0) {
-                vy = -vy * FLOOR_BOUNCE;
-                if (Math.abs(vy) < REST_SPEED) {
-                    vy = 0;
+                if (forcedBounce > 0) {
+                    vy = -forcedBounce;
+                } else {
+                    vy = -vy * FLOOR_BOUNCE;
+                    if (Math.abs(vy) < REST_SPEED) {
+                        vy = 0;
+                    }
                 }
             }
         }
@@ -186,6 +243,14 @@ public class Ball
             limitSpeed();
         }
         return true;
+    }
+
+    // Indica si el balon toca el rectangulo (sin margen). No lo mueve
+    public boolean touchesRectangle(double rx, double ry, double rw, double rh)
+    {
+        double dx = x - clamp(x, rx, rx + rw);
+        double dy = y - clamp(y, ry, ry + rh);
+        return dx * dx + dy * dy < RADIUS * RADIUS;
     }
 
     // Indica si el balon se esta metiendo claramente en el rectangulo

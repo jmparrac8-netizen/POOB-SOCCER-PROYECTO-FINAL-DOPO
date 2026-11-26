@@ -9,6 +9,14 @@ import DOMINIO.PoobSoccer;
 // Pruebas de unidad de PoobSoccer.
 public class PoobSoccerTest
 {
+    // Le da un gol de ventaja al jugador 1 (el balon entra a la cancha derecha)
+    private static void giveLead(PoobSoccer g)
+    {
+        g.getBall().reset(PoobSoccer.WIDTH - Goal.WIDTH - 20, PoobSoccer.HEIGHT - Ball.RADIUS);
+        g.getBall().setVelocity(10, 0);
+        tick(g, 20);
+    }
+
     // Avanza el juego n pasos
     private static void tick(PoobSoccer g, int n)
     {
@@ -64,10 +72,11 @@ public class PoobSoccerTest
         Check.that("not over yet", !g.isGameOver());
     }
 
-    // El juego deberia terminar al llegar a cero
+    // El juego deberia terminar al llegar a cero si hay un ganador
     static void gameShouldEndWhenClockReachesZero()
     {
         PoobSoccer g = new PoobSoccer();
+        giveLead(g);
         g.advanceTime(90);
         Check.that("game over", g.isGameOver());
         Check.equal("time zero", 0, g.getTimeLeft());
@@ -77,6 +86,7 @@ public class PoobSoccerTest
     static void clockShouldNeverGoNegative()
     {
         PoobSoccer g = new PoobSoccer();
+        giveLead(g);
         g.advanceTime(500);
         Check.equal("time not negative", 0, g.getTimeLeft());
         Check.that("game over", g.isGameOver());
@@ -86,6 +96,7 @@ public class PoobSoccerTest
     static void nothingShouldMoveAfterGameOver()
     {
         PoobSoccer g = new PoobSoccer();
+        giveLead(g);
         double x = g.getPlayer1().getX();
         g.advanceTime(90);
         g.getPlayer1().setMovingRight(true);
@@ -232,6 +243,7 @@ public class PoobSoccerTest
     static void ballShouldNotMoveAfterGameOver()
     {
         PoobSoccer g = new PoobSoccer();
+        giveLead(g);
         g.getBall().reset(600, 100);
         g.advanceTime(90);
         tick(g, 10);

@@ -15,6 +15,12 @@ public class AllTests
         failed += PlayerTest.run();
         Check.reset();
         failed += PoobSoccerTest.run();
+        Check.reset();
+        failed += CharacterTest.run();
+        Check.reset();
+        failed += MatchTest.run();
+        Check.reset();
+        failed += PowerTest.run();
         System.out.println();
         System.out.println(failed == 0 ? "TODAS LAS PRUEBAS PASARON" : "HAY PRUEBAS QUE FALLARON: " + failed);
         System.exit(failed == 0 ? 0 : 1);
